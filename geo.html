@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Populacional do Distrito Federal</title>
+    
+    <!-- Leaflet CSS for map rendering -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* Custom styles for the map and page */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5; /* Light gray background similar to the reference */
+        }
+        #map { 
+            height: 65vh; 
+            width: 100%;
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            position: relative; /* Needed for error message positioning */
+            background-color: #e5e7eb; /* Placeholder color while map tiles load */
+        }
+        .leaflet-popup-content-wrapper {
+            border-radius: 0.5rem; /* rounded-lg */
+        }
+        .legend {
+            line-height: 1.5;
+            color: #374151; /* gray-700 */
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        }
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.95;
+            border-radius: 4px;
+        }
+        /* PicPay-like green color */
+        .picpay-green {
+            background-color: #21C25E;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">Dashboard Populacional - DF</h1>
+            <p class="text-gray-500">Visão geral da distribuição populacional nas regiões administrativas.</p>
+        </header>
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Card 1: Total -->
+            <div class="picpay-green text-white p-5 rounded-xl shadow-lg flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                    <span class="font-semibold">Total de Pessoas</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                </div>
+                <p id="total-pessoas" class="text-3xl font-bold mt-2">0</p>
+            </div>
+            <!-- Card 2: Média -->
+            <div class="bg-white p-5 rounded-xl shadow-md flex flex-col justify-between">
+                <span class="font-semibold text-gray-600">Média por Região</span>
+                <p id="media-regiao" class="text-3xl font-bold text-gray-800 mt-2">0</p>
+            </div>
+            <!-- Card 3: Maior -->
+            <div class="bg-white p-5 rounded-xl shadow-md flex flex-col justify-between">
+                <span class="font-semibold text-gray-600">Região Mais Populosa</span>
+                <p id="maior-regiao" class="text-2xl font-bold text-gray-800 mt-2 truncate">N/A</p>
+            </div>
+            <!-- Card 4: Menor -->
+            <div class="bg-white p-5 rounded-xl shadow-md flex flex-col justify-between">
+                <span class="font-semibold text-gray-600">Região Menos Populosa</span>
+                <p id="menor-regiao" class="text-2xl font-bold text-gray-800 mt-2 truncate">N/A</p>
+            </div>
+        </div>
+        
+        <div id="map"></div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+    
+    <!-- GeoJSON data embedded directly to prevent loading errors -->
+    <script>
+        const municipios = {"type":"FeatureCollection","features":[{"type":"Feature","properties":{"id":"5300108","nome":"BRASÍLIA","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.93,-15.74],[-47.88,-15.70],[-47.83,-15.71],[-47.78,-15.71],[-47.74,-15.74],[-47.69,-15.76],[-47.64,-15.80],[-47.59,-15.81],[-47.56,-15.83],[-47.52,-15.88],[-47.47,-15.91],[-47.42,-15.96],[-47.38,-15.98],[-47.36,-16.03],[-47.40,-16.05],[-47.45,-16.05],[-47.50,-16.03],[-47.54,-16.01],[-47.59,-15.98],[-47.63,-15.97],[-47.68,-15.94],[-47.73,-15.92],[-47.77,-15.89],[-47.82,-15.88],[-47.87,-15.86],[-47.92,-15.83],[-47.96,-15.82],[-48.01,-15.80],[-48.06,-15.78],[-48.11,-15.78],[-48.16,-15.80],[-48.21,-15.83],[-48.24,-15.80],[-48.20,-15.77],[-48.15,-15.75],[-48.10,-15.75],[-48.05,-15.76],[-48.00,-15.77],[-47.96,-15.78],[-47.93,-15.74]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"GAMA","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-48.09,-16.00],[-48.04,-15.98],[-48.00,-15.98],[-47.95,-16.01],[-47.91,-16.05],[-47.95,-16.08],[-48.00,-16.10],[-48.04,-16.10],[-48.09,-16.07],[-48.13,-16.04],[-48.12,-16.01],[-48.09,-16.00]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"TAGUATINGA","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-48.08,-15.82],[-48.03,-15.81],[-47.98,-15.82],[-47.98,-15.86],[-48.03,-15.88],[-48.07,-15.87],[-48.12,-15.85],[-48.08,-15.82]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"BRAZLÂNDIA","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-48.22,-15.70],[-48.17,-15.68],[-48.12,-15.68],[-48.07,-15.71],[-48.03,-15.75],[-48.03,-15.80],[-48.08,-15.82],[-48.12,-15.85],[-48.17,-15.84],[-48.21,-15.83],[-48.24,-15.80],[-48.22,-15.70]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"SOBRADINHO","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.88,-15.60],[-47.83,-15.58],[-47.78,-15.60],[-47.74,-15.64],[-47.74,-15.69],[-47.78,-15.71],[-47.83,-15.71],[-47.88,-15.70],[-47.93,-15.74],[-47.91,-15.69],[-47.88,-15.65],[-47.88,-15.60]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"PLANALTINA","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.74,-15.45],[-47.69,-15.43],[-47.64,-15.45],[-47.59,-15.48],[-47.55,-15.53],[-47.55,-15.58],[-47.59,-15.62],[-47.64,-15.65],[-47.69,-15.66],[-47.74,-15.64],[-47.78,-15.60],[-47.83,-15.58],[-47.82,-15.53],[-47.78,-15.49],[-47.74,-15.45]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"PARANOÁ","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.83,-15.71],[-47.78,-15.71],[-47.74,-15.74],[-47.78,-15.78],[-47.82,-15.81],[-47.87,-15.82],[-47.87,-15.77],[-47.83,-15.71]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"NÚCLEO BANDEIRANTE","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.98,-15.86],[-47.93,-15.85],[-47.92,-15.88],[-47.96,-15.91],[-48.01,-15.91],[-48.02,-15.87],[-47.98,-15.86]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"CEILÂNDIA","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-48.17,-15.84],[-48.12,-15.85],[-48.07,-15.87],[-48.03,-15.88],[-48.07,-15.92],[-48.12,-15.93],[-48.17,-15.91],[-48.21,-15.88],[-48.17,-15.84]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"GUARÁ","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.98,-15.82],[-47.93,-15.80],[-47.93,-15.85],[-47.98,-15.86],[-48.02,-15.87],[-48.03,-15.84],[-47.98,-15.82]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"CRUZEIRO","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.96,-15.78],[-47.93,-15.74],[-47.93,-15.80],[-47.96,-15.78]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"SAMAMBAIA","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-48.13,-15.89],[-48.07,-15.92],[-48.03,-15.88],[-48.07,-15.87],[-48.12,-15.85],[-48.17,-15.84],[-48.21,-15.88],[-48.18,-15.89],[-48.13,-15.89]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"SANTA MARIA","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-48.00,-15.98],[-47.95,-16.01],[-47.91,-16.05],[-47.91,-16.10],[-47.95,-16.12],[-48.00,-16.10],[-48.04,-16.10],[-48.04,-16.06],[-48.00,-16.03],[-48.00,-15.98]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"SÃO SEBASTIÃO","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.82,-15.93],[-47.78,-15.91],[-47.73,-15.92],[-47.68,-15.94],[-47.68,-15.99],[-47.73,-16.01],[-47.77,-16.00],[-47.82,-15.98],[-47.82,-15.93]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"RECANTO DAS EMAS","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-48.13,-15.94],[-48.09,-15.96],[-48.04,-15.98],[-48.09,-16.00],[-48.12,-16.01],[-48.13,-16.04],[-48.18,-16.02],[-48.17,-15.98],[-48.13,-15.94]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"LAGO SUL","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.92,-15.83],[-47.87,-15.86],[-47.82,-15.88],[-47.82,-15.93],[-47.87,-15.95],[-47.92,-15.93],[-47.96,-15.91],[-47.93,-15.85],[-47.92,-15.83]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"RIACHO FUNDO","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-48.03,-15.88],[-47.98,-15.86],[-48.01,-15.91],[-48.04,-15.91],[-48.03,-15.88]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"LAGO NORTE","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.91,-15.69],[-47.88,-15.65],[-47.88,-15.70],[-47.93,-15.74],[-47.96,-15.78],[-48.00,-15.77],[-48.01,-15.72],[-47.96,-15.69],[-47.91,-15.69]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"CANDANGOLÂNDIA","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.96,-15.82],[-47.93,-15.80],[-47.93,-15.85],[-47.96,-15.82]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"ÁGUAS CLARAS","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-48.03,-15.84],[-47.98,-15.82],[-48.02,-15.87],[-48.03,-15.84]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"RIACHO FUNDO II","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-48.04,-15.98],[-48.00,-15.98],[-48.00,-16.03],[-48.04,-16.06],[-48.09,-16.07],[-48.09,-16.02],[-48.04,-15.98]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"SUDOESTE E OCTOGONAL","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.93,-15.80],[-47.96,-15.78],[-47.96,-15.82],[-47.93,-15.80]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"VARJÃO","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.88,-15.70],[-47.87,-15.77],[-47.91,-15.78],[-47.91,-15.74],[-47.88,-15.70]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"PARK WAY","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-48.04,-15.91],[-48.01,-15.91],[-47.96,-15.91],[-47.92,-15.93],[-47.87,-15.95],[-47.91,-15.97],[-47.95,-16.01],[-48.00,-15.98],[-48.04,-15.98],[-48.09,-15.96],[-48.09,-15.92],[-48.04,-15.91]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"SCIA","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-48.07,-15.75],[-48.03,-15.75],[-48.03,-15.80],[-48.08,-15.82],[-48.11,-15.78],[-48.07,-15.75]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"SOBRADINHO II","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.83,-15.58],[-47.78,-15.60],[-47.74,-15.64],[-47.69,-15.66],[-47.64,-15.65],[-47.68,-15.61],[-47.73,-15.58],[-47.78,-15.55],[-47.82,-15.53],[-47.83,-15.58]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"JARDIM BOTÂNICO","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.87,-15.86],[-47.82,-15.88],[-47.82,-15.93],[-47.78,-15.91],[-47.82,-15.81],[-47.87,-15.82],[-47.87,-15.86]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"ITAPOÃ","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.78,-15.71],[-47.74,-15.74],[-47.69,-15.76],[-47.74,-15.79],[-47.78,-15.78],[-47.78,-15.71]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"SIA","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.98,-15.82],[-47.93,-15.80],[-47.93,-15.85],[-47.98,-15.86],[-47.98,-15.82]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"VICENTE PIRES","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-48.07,-15.82],[-48.03,-15.81],[-48.03,-15.84],[-48.07,-15.82]]]}},{"type":"Feature","properties":{"id":"5300108","nome":"FERCAL","sigla":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-47.91,-15.54],[-47.88,-15.51],[-47.83,-15.51],[-47.82,-15.53],[-47.83,-15.58],[-47.88,-15.60],[-47.91,-15.60],[-47.91,-15.54]]]}}]}
+    </script>
+
+    <script>
+        // Data without the unclassified entry
+        const data = {
+            "Taguatinga": 6371, "Águas Claras": 4566, "Ceilândia": 4449, "Gama": 2930,
+            "Samambaia": 2903, "Planaltina": 2711, "Sobradinho": 2619, "Guará": 2496,
+            "Santa Maria": 1436, "Recanto das Emas": 1132, "Lago Sul": 1096, "Lago Norte": 1067,
+            "Sudoeste/Octogonal": 1047, "Brazlândia": 1029, "Jardim Botânico": 979,
+            "Núcleo Bandeirante": 758, "Riacho Fundo II": 691, "Riacho Fundo I": 674,
+            "Cruzeiro": 620, "Sobradinho II": 534, "Candangolândia": 254, "Itapoã": 233,
+            "SIA": 120, "SCIA (Estrutural)": 119, "Fercal": 9, "Plano Piloto": 6173
+        };
+
+        // --- Calculate and Display Summary Stats ---
+        function calculateStats() {
+            const values = Object.values(data);
+            if (values.length === 0) return;
+
+            const totalPessoas = values.reduce((sum, current) => sum + current, 0);
+            const media = totalPessoas / values.length;
+
+            const entries = Object.entries(data);
+            const [maiorRegiao] = entries.reduce((max, entry) => entry[1] > max[1] ? entry : max, ["", 0]);
+            const [menorRegiao] = entries.reduce((min, entry) => entry[1] < min[1] ? entry : min, ["", Infinity]);
+            
+            document.getElementById('total-pessoas').textContent = totalPessoas.toLocaleString('pt-BR');
+            document.getElementById('media-regiao').textContent = Math.round(media).toLocaleString('pt-BR');
+            document.getElementById('maior-regiao').textContent = maiorRegiao;
+            document.getElementById('menor-regiao').textContent = menorRegiao;
+        }
+        calculateStats();
+
+        // --- Map Initialization ---
+        const nameNormalizationMap = {
+            "BRASÍLIA": "Plano Piloto", "GAMA": "Gama", "TAGUATINGA": "Taguatinga", "BRAZLÂNDIA": "Brazlândia",
+            "SOBRADINHO": "Sobradinho", "PLANALTINA": "Planaltina", "PARANOÁ": "Paranoá", "NÚCLEO BANDEIRANTE": "Núcleo Bandeirante",
+            "CEILÂNDIA": "Ceilândia", "GUARÁ": "Guará", "CRUZEIRO": "Cruzeiro", "SAMAMBAIA": "Samambaia", "SANTA MARIA": "Santa Maria",
+            "SÃO SEBASTIÃO": "São Sebastião", "RECANTO DAS EMAS": "Recanto das Emas", "LAGO SUL": "Lago Sul", "RIACHO FUNDO": "Riacho Fundo I",
+            "LAGO NORTE": "Lago Norte", "CANDANGOLÂNDIA": "Candangolândia", "ÁGUAS CLARAS": "Águas Claras", "RIACHO FUNDO II": "Riacho Fundo II",
+            "SUDOESTE E OCTOGONAL": "Sudoeste/Octogonal", "VARJÃO": "Varjão", "PARK WAY": "Park Way", "SCIA": "SCIA (Estrutural)",
+            "SOBRADINHO II": "Sobradinho II", "JARDIM BOTÂNICO": "Jardim Botânico", "ITAPOÃ": "Itapoã", "SIA": "SIA",
+            "VICENTE PIRES": "Vicente Pires", "FERCAL": "Fercal"
+        };
+
+        const map = L.map('map').setView([-15.793889, -47.882778], 10);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd', maxZoom: 20
+        }).addTo(map);
+
+        let geoJsonLayer;
+
+        // New green color scale
+        function getColor(d) {
+            return d > 6000 ? '#005a32' :
+                   d > 4000 ? '#238b45' :
+                   d > 2500 ? '#41ab5d' :
+                   d > 1500 ? '#74c476' :
+                   d > 1000 ? '#a1d99b' :
+                   d > 500  ? '#c7e9c0' :
+                   d > 100  ? '#e5f5e0' :
+                              '#f7fcf5';
+        }
+        
+        function style(feature) {
+            const geoJsonName = feature.properties.nome.toUpperCase();
+            const dataName = nameNormalizationMap[geoJsonName];
+            const quantity = data[dataName] || 0;
+            return {
+                fillColor: getColor(quantity),
+                weight: 1.5, opacity: 1, color: '#4b5563', dashArray: '3', fillOpacity: 0.8
+            };
+        }
+
+        function highlightFeature(e) {
+            const layer = e.target;
+            layer.setStyle({ weight: 4, color: '#111827', dashArray: '', fillOpacity: 0.9 });
+            layer.bringToFront();
+        }
+
+        function resetHighlight(e) {
+            geoJsonLayer.resetStyle(e.target);
+        }
+
+        function zoomToFeature(e) {
+            map.fitBounds(e.target.getBounds());
+        }
+
+        function onEachFeature(feature, layer) {
+            layer.on({ mouseover: highlightFeature, mouseout: resetHighlight, click: zoomToFeature });
+            const geoJsonName = feature.properties.nome.toUpperCase();
+            const dataName = nameNormalizationMap[geoJsonName] || feature.properties.nome;
+            const quantity = data[dataName];
+            let popupContent = `<strong class="text-lg">${dataName}</strong><hr class="my-1">`;
+            popupContent += (quantity !== undefined) ? `População: <strong>${quantity.toLocaleString('pt-BR')}</strong>` : '<em>Dados não disponíveis</em>';
+            layer.bindPopup(popupContent);
+        }
+        
+        const legend = L.control({position: 'bottomright'});
+        legend.onAdd = function (map) {
+            const div = L.DomUtil.create('div', 'info legend');
+            const grades = [0, 100, 500, 1000, 1500, 2500, 4000, 6000];
+            let labels = ['<strong class="text-base">População</strong>'];
+            for (let i = 0; i < grades.length; i++) {
+                const from = grades[i];
+                const to = grades[i + 1];
+                labels.push(`<i style="background:${getColor(from + 1)}"></i> ${from.toLocaleString('pt-BR')}${to ? '&ndash;' + to.toLocaleString('pt-BR') : '+'}`);
+            }
+            div.innerHTML = labels.join('<br>');
+            return div;
+        };
+        legend.addTo(map);
+
+        // The 'municipios' variable is now available globally from the script tag above.
+        // We can create the layer directly.
+        try {
+            geoJsonLayer = L.geoJson(municipios, { 
+                style: style, 
+                onEachFeature: onEachFeature 
+            }).addTo(map);
+        } catch (error) {
+            console.error("Could not process the embedded GeoJSON data:", error);
+            const errorDiv = document.createElement('div');
+            errorDiv.innerHTML = '<strong>Erro:</strong> Falha ao processar os dados do mapa.';
+            errorDiv.className = 'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-white/80 text-red-600 rounded-lg shadow-lg z-[1000]';
+            document.getElementById('map').appendChild(errorDiv);
+        }
+
+    </script>
+</body>
+</html>
